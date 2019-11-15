@@ -4,6 +4,7 @@
  *
  */
 #include "filesys.h"
+#include "helpers.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,9 +64,9 @@ void writeblock(diskblock_t* block, int block_address) {
  *              - our FAT has MAXBLOCKS entries, which is currently 1024
  *                each FAT entry is a fatentry_t, which is currently 2 bytes
  *              - we need (MAXBLOCKS /(BLOCKSIZE / sizeof(fatentry_t))) blocks
- * to store the FAT
+ *                to store the FAT
  *              - each block can hold (BLOCKSIZE / sizeof(fatentry_t)) fat
- * entries
+ *                entries
  */
 
 /* implement format()
@@ -97,3 +98,21 @@ void format() {
 void printBlock(int blockIndex) {
   printf("virtualdisk[%d] = %s\n", blockIndex, virtualDisk[blockIndex].data);
 }
+
+MyFILE* myfopen(const char* filename, const char* mode) {}
+
+void myfclose(MyFILE* stream) {}
+
+int myfgetc(MyFILE* stream) {}
+
+void myfputc(int b, MyFILE* stream) {}
+
+void mymkdir(const char* path) {}
+
+void myrmdir(const char* path) {}
+
+void mychdir(const char* path) {}
+
+void myremove(const char* path) {}
+
+char** mylistdir(const char* path) {}

@@ -97,6 +97,8 @@ typedef struct filedescriptor {
   diskblock_t buffer;
 } MyFILE;
 
+// creates the initial structure on the virtual disk, writing the FAT and
+// the root directory into the virtual disk
 void format();
 void writedisk(const char* filename);
 
