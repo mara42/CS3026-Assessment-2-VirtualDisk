@@ -10,12 +10,14 @@
 
 #include <time.h>
 
+/*
 #ifndef TRUE
 #define TRUE 1
 #endif
 #ifndef FALSE
 #define FALSE 0
 #endif
+*/
 
 #define MAXBLOCKS 1024
 #define BLOCKSIZE 1024
