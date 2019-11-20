@@ -4,12 +4,12 @@
  *
  */
 #include "filesys.h"
-#include "helpers.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "helpers.h"
 
 diskblock_t virtualDisk[MAXBLOCKS];  // define our in-memory virtual, with
                                      // MAXBLOCKS blocks
@@ -21,15 +21,13 @@ fatentry_t currentDirIndex = 0;
 
 /* writedisk : writes virtual disk out to physical disk
  *
- * in: file name of stored virtual disk
- */
-
+ * in: file name of stored virtual disk */
 void writedisk(const char* filename) {
   printf("writedisk> virtualdisk[0] = %s\n", virtualDisk[0].data);
   FILE* dest = fopen(filename, "w");
   if (fwrite(virtualDisk, sizeof(virtualDisk), 1, dest) < 0)
     fprintf(stderr, "write virtual disk to disk failed\n");
-  // write( dest, virtualDisk, sizeof(virtualDisk) ) ;
+  // write(dest, virtualDisk, sizeof(virtualDisk));
   fclose(dest);
 }
 
@@ -44,7 +42,6 @@ void readdisk(const char* filename) {
 /* the basic interface to the virtual disk
  * this moves memory around
  */
-
 void writeblock(diskblock_t* block, int block_address) {
   // printf ( "writeblock> block %d = %s\n", block_address, block->data ) ;
   memmove(virtualDisk[block_address].data, block->data, BLOCKSIZE);
@@ -54,7 +51,7 @@ void writeblock(diskblock_t* block, int block_address) {
 
 /* read and write FAT
  *
- * please note: a FAT entry is a short, this is a 16-bit word, or 2 bytes
+ * please note: a FAT entry is a short this is a 16-bit word, or 2 bytes
  *              our blocksize for the virtual disk is 1024, therefore
  *              we can store 512 FAT entries in one block
  *
@@ -68,42 +65,65 @@ void writeblock(diskblock_t* block, int block_address) {
  *              - each block can hold (BLOCKSIZE / sizeof(fatentry_t)) fat
  *                entries
  */
+void readblock(diskblock_t* block, int block_address) {
+  memmove(block->data, virtualDisk[block_address].data, BLOCKSIZE);
+}
 
-/* implement format()
+/* prepare block 0 : fill it with '\0',
+ * use strcpy() to copy some text to it for test purposes
+ * write block 0 to virtual disk
+ * prepare FAT table
+ * write FAT blocks to virtual disk
+ * prepare root directory
+ * write root directory block to virtual disk
  */
 void format() {
-  diskblock_t block;
-  direntry_t rootDir;
   int pos = 0;
   int fatentry = 0;
   int fatblocksneeded = (MAXBLOCKS / FATENTRYCOUNT);
 
-  /* prepare block 0 : fill it with '\0',
-   * use strcpy() to copy some text to it for test purposes
-   * write block 0 to virtual disk
-   */
+  diskblock_t block;
+  memset(block.data, 0, BLOCKSIZE);
+  strcpy(&block.data, "CS3008 Operating Systems Assessment 2012");
+  writeblock(&block, 0);
 
-  /* prepare FAT table
-   * write FAT blocks to virtual disk
-   */
+  memset(FAT+2, UNUSED, MAXBLOCKS-2);
+  rootDirIndex = 3;
+  FAT[1] = 2;
+  FAT[2] = ENDOFCHAIN;
+  FAT[rootDirIndex] = ENDOFCHAIN;  // this is for the dirblock below
 
-  /* prepare root directory
-   * write root directory block to virtual disk
-   */
+  diskblock_t fblock;
+  // copyFAT(&fblock);
+  writeblock(&FAT, 1);
+
+  diskblock_t rootDir;
+  rootDir.dir = (dirblock_t){.isdir = true, .nextEntry = 0};
+
+  writeblock(&rootDir, rootDirIndex);
 }
 
-/* use this for testing
- */
+// copies the content of the FAT into one or
+// more blocks, then write these blocks to the virtual disk
+void copyFAT(diskblock_t* block) {
+  // TODO: write blocks to virtual disk
+}
+
+/* use this for testing */
 
 void printBlock(int blockIndex) {
   printf("virtualdisk[%d] = %s\n", blockIndex, virtualDisk[blockIndex].data);
 }
 
-MyFILE* myfopen(const char* filename, const char* mode) {}
+MyFILE* myfopen(const char* filename, const char* mode) {
+  return 0;
+}
 
 void myfclose(MyFILE* stream) {}
 
-int myfgetc(MyFILE* stream) {}
+int myfgetc(MyFILE* stream) {
+  return 0;
+}
 
 void myfputc(int b, MyFILE* stream) {}
 
@@ -115,4 +135,6 @@ void mychdir(const char* path) {}
 
 void myremove(const char* path) {}
 
-char** mylistdir(const char* path) {}
+char** mylistdir(const char* path) {
+  return 0;
+}

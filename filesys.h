@@ -28,18 +28,22 @@
 
 #define UNUSED -1
 #define ENDOFCHAIN 0
+
+#ifndef EOF
 #define EOF -1
+#endif
 
 typedef unsigned char Byte;
 
 /* create a type fatentry_t, we set this currently to short (16-bit)
- */
-typedef short fatentry_t;
+   NOTE: I replaced short with int16_t to be more explicit and to ensure
+   16-bit length at all times */
+typedef int16_t fatentry_t;
 
-// a FAT block is a list of 16-bit entries that form a chain of disk addresses
 
 // const int   fatentrycount = (blocksize / sizeof(fatentry_t)) ;
 
+// a FAT block is a list of 16-bit entries that form a chain of disk addresses
 typedef fatentry_t fatblock_t[FATENTRYCOUNT];
 
 /* create a type direntry_t
@@ -74,7 +78,7 @@ typedef struct dirblock {
 typedef Byte datablock_t[BLOCKSIZE];
 
 // a diskblock can be either a directory block, a FAT block or actual data
-
+// datablock_t data; dirblock_t dir; fatblock_t fat;
 typedef union block {
   datablock_t data;
   dirblock_t dir;
