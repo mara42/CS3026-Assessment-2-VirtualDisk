@@ -1,5 +1,22 @@
 #include "filesys.h"
 
+// save contents of buffer to a block
+// and give the buffer a new empty block
+// also update FAT table
+void saveBuffer(MyFILE*, fatentry_t);
+
+// follow blockchain to next block
+// to swap buffer with and reset pos
+void newBuffer(MyFILE*);
+
+// copies the content of the FAT into one or
+// more blocks, then write these blocks to the virtual disk
+void copyFAT();
+
+// search FAT for the first unused FAT
+// return -1 if none exist
+fatentry_t findFree();
+
 // Opens a file on the virtual disk and manages a buffer for it of size
 // BLOCKSIZE, mode may be either “r” for readonly or “w” for read/write/append
 // (default “w”)

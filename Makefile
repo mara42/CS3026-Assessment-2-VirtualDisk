@@ -14,6 +14,8 @@ clean:
 run: shell
 	./shell
 hex: run
-	hexdump -C virtualdisk_test
+	hexdump -C virtualdiskC3_C1
+	# hexdump -C virtualdisk_test
 diff: run
-	colordiff -u <(hexdump -C virtualdiskD3_D1) <(hexdump -C virtualdisk_test)
+	# colordiff -u <(hexdump -C virtualdiskD3_D1) <(hexdump -C virtualdisk_test)
+	colordiff -u <(hexdump -C virtualdiskD3_D1) <(hexdump -C virtualdiskC3_C1)

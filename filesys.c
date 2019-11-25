@@ -40,8 +40,7 @@ void readdisk(const char* filename) {
 }
 
 /* the basic interface to the virtual disk
- * this moves memory around
- */
+ * this moves memory around */
 void writeblock(diskblock_t* block, int block_address) {
   // printf ( "writeblock> block %d = %s\n", block_address, block->data ) ;
   memmove(virtualDisk[block_address].data, block->data, BLOCKSIZE);
@@ -80,33 +79,44 @@ void readblock(diskblock_t* block, int block_address) {
 void format() {
   int pos = 0;
   int fatentry = 0;
-  int fatblocksneeded = (MAXBLOCKS / FATENTRYCOUNT);
 
-  diskblock_t block;
-  memset(block.data, 0, BLOCKSIZE);
-  strcpy(&block.data, "CS3008 Operating Systems Assessment 2012");
+  diskblock_t block = {0};
+  memmove(block.data, (Byte*)"S3008 Operating Systems Assessment 2012", 40);
   writeblock(&block, 0);
 
-  memset(FAT+2, UNUSED, MAXBLOCKS-2);
-  rootDirIndex = 3;
-  FAT[1] = 2;
-  FAT[2] = ENDOFCHAIN;
-  FAT[rootDirIndex] = ENDOFCHAIN;  // this is for the dirblock below
+  // memset(FAT + sizeof(fatentry_t), UNUSED, sizeof(FAT)-sizeof(fatentry_t));
+  memset(FAT, UNUSED, sizeof(FAT));
+  FAT[0] = 0;
 
-  diskblock_t fblock;
-  // copyFAT(&fblock);
-  writeblock(&FAT, 1);
+  // unfortunately this might be making something that's not supposed to be
+  // generic, generic. I blame the language used to describe copyFAT's
+  // implementation with the whole 1 or more
+  for (int i = 1; i < FATBLOCKSNEEDED; i++) {
+    FAT[i] = i + 1;
+  }
+  FAT[FATBLOCKSNEEDED] = ENDOFCHAIN;
+  rootDirIndex = FATBLOCKSNEEDED + 1;
+  FAT[rootDirIndex] = ENDOFCHAIN;  // this is for the dirblock below and placed
+                                   // here to reduce writes
+  copyFAT();
 
-  diskblock_t rootDir;
-  rootDir.dir = (dirblock_t){.isdir = true, .nextEntry = 0};
+  diskblock_t rootDir = {0};
+  rootDir.dir = (dirblock_t){.isdir = true, .nextEntry = 0, .entrylist = 0};
 
   writeblock(&rootDir, rootDirIndex);
+
+  // maybe not right to define it here?
+  currentDirIndex = rootDirIndex;
 }
 
-// copies the content of the FAT into one or
-// more blocks, then write these blocks to the virtual disk
-void copyFAT(diskblock_t* block) {
-  // TODO: write blocks to virtual disk
+void copyFAT() {
+  int increment =
+      MAXBLOCKS / FATBLOCKSNEEDED * sizeof(fatentry_t);  // make it look nicer?
+  for (int i = 0; i < FATBLOCKSNEEDED; i++) {
+    diskblock_t tmp;
+    memmove(tmp.fat, FAT + increment * i, increment);
+    writeblock(&tmp, i + 1);
+  }
 }
 
 /* use this for testing */
@@ -116,16 +126,124 @@ void printBlock(int blockIndex) {
 }
 
 MyFILE* myfopen(const char* filename, const char* mode) {
-  return 0;
+  MyFILE* f = malloc(sizeof(MyFILE));
+  *f = (MyFILE){0};
+  strcpy(f->mode, mode);
+
+  int dirIndex = currentDirIndex;
+  diskblock_t* dirBlock = calloc(sizeof(diskblock_t), 0);
+  readblock(dirBlock, dirIndex);
+  dirblock_t* dir = &dirBlock->dir;
+
+  /*  open existing file */
+  for (int i = 0; i < dir->nextEntry; i++) {
+    direntry_t entry = dir->entrylist[i];
+    if (strcmp(entry.name, filename) == 0 && !entry.isdir) {
+      f->blockno = entry.firstblock;
+      readblock(&f->buffer, entry.firstblock);
+    }
+  }
+
+
+  /* new file */
+  if (!f->blockno) {
+    f->blockno = findFree();
+    direntry_t entry = (direntry_t){
+        .entrylength = 0,
+        .isdir = false,
+        .unused = false,
+        .modtime = 0,
+        .filelength = 0,
+        .firstblock = f->blockno,
+    };
+    strcpy(entry.name, filename);
+    dirBlock->dir.entrylist[dir->nextEntry++] = entry;
+
+    FAT[f->blockno] = ENDOFCHAIN;
+    copyFAT();
+    writeblock(dirBlock, dirIndex);
+    free(dirBlock);
+  }
+
+  // tell direntry_t where it's located
+  f->dirBlockNo = dirIndex;
+  f->dirEntryNo = dir->nextEntry;
+
+  return f;
 }
 
-void myfclose(MyFILE* stream) {}
+// TODO: do we need to support multiple open files at once?
+fatentry_t findFree() {
+  for (int i = rootDirIndex + 1; i < MAXBLOCKS; i++) {
+    if (FAT[i] == UNUSED)
+      return i;
+  }
+  return -1;
+}
+
+void myfclose(MyFILE* stream) {
+  diskblock_t dir = {0};
+  readblock(&dir, stream->dirBlockNo);
+  direntry_t* entry = &dir.dir.entrylist[stream->dirEntryNo];
+  int chain = entry->firstblock;
+  while ((chain = FAT[chain]) != ENDOFCHAIN) {
+    entry->entrylength++;
+  }
+  entry->filelength = BLOCKSIZE * entry->entrylength + stream->pos;
+  writeblock(&dir, stream->dirBlockNo);
+  saveBuffer(stream, ENDOFCHAIN);
+  free(stream);
+}
 
 int myfgetc(MyFILE* stream) {
-  return 0;
+  if (FAT[stream->blockno] < 1) {
+    diskblock_t dir = {0};
+    readblock(&dir, stream->dirBlockNo);
+    int remaining = (dir.dir.entrylist[stream->dirEntryNo].filelength-1) % (BLOCKSIZE) + 1;
+    if (remaining == stream->pos)  {
+      return EOF;
+    }
+  }
+  // int index = stream->pos++;
+  if (stream->pos == BLOCKSIZE) {
+    newBuffer(stream);
+  }
+
+  return stream->buffer.data[stream->pos++];
 }
 
-void myfputc(int b, MyFILE* stream) {}
+void newBuffer(MyFILE* stream) {
+  stream->blockno = FAT[stream->blockno];
+  readblock(&stream->buffer, stream->blockno);
+  stream->pos = 0;
+}
+
+void myfputc(int b, MyFILE* stream) {
+  if (stream->pos == BLOCKSIZE) {
+    saveBuffer(stream, findFree());
+  }
+  stream->buffer.data[stream->pos++] = b;
+}
+
+void saveBuffer(MyFILE* stream, fatentry_t next) {
+  writeblock(&stream->buffer, stream->blockno);
+
+  FAT[stream->blockno] = next;
+  FAT[next] = ENDOFCHAIN;
+  copyFAT();
+  stream->blockno = next;
+
+  memset(stream->buffer.data, 0, BLOCKSIZE);
+  stream->pos = 0;
+}
+
+/*
+C:
+- myfopen()
+- myfputc()
+- myfgetc()
+- myfclose()
+*/
 
 void mymkdir(const char* path) {}
 
