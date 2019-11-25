@@ -89,8 +89,7 @@ void format() {
   FAT[0] = 0;
 
   // unfortunately this might be making something that's not supposed to be
-  // generic, generic. I blame the language used to describe copyFAT's
-  // implementation with the whole 1 or more
+  // generic, generic.
   for (int i = 1; i < FATBLOCKSNEEDED; i++) {
     FAT[i] = i + 1;
   }
@@ -125,6 +124,16 @@ void printBlock(int blockIndex) {
   printf("virtualdisk[%d] = %s\n", blockIndex, virtualDisk[blockIndex].data);
 }
 
+fatentry_t searchDir(dirblock_t* dir, const char* name) {
+  for (int i = 0; i < dir->nextEntry; i++) {
+    direntry_t entry = dir->entrylist[i];
+    if (strcmp(entry.name, name) == 0) {
+      return entry.firstblock;
+    }
+  }
+  return 0;
+}
+
 MyFILE* myfopen(const char* filename, const char* mode) {
   MyFILE* f = malloc(sizeof(MyFILE));
   *f = (MyFILE){0};
@@ -136,14 +145,21 @@ MyFILE* myfopen(const char* filename, const char* mode) {
   dirblock_t* dir = &dirBlock->dir;
 
   /*  open existing file */
-  for (int i = 0; i < dir->nextEntry; i++) {
-    direntry_t entry = dir->entrylist[i];
-    if (strcmp(entry.name, filename) == 0 && !entry.isdir) {
-      f->blockno = entry.firstblock;
-      readblock(&f->buffer, entry.firstblock);
-    }
-  }
+  f->blockno = searchDir(dir, filename);
 
+  if (!f->blockno && strcmp(mode, "r") == 0)
+    return 0;
+
+  readblock(&f->buffer, f->blockno);
+
+
+  // for (int i = 0; i < dir->nextEntry; i++) {
+  //   direntry_t entry = dir->entrylist[i];
+  //   if (strcmp(entry.name, filename) == 0 && !entry.isdir) {
+  //     f->blockno = entry.firstblock;
+  //     readblock(&f->buffer, entry.firstblock);
+  //   }
+  // }
 
   /* new file */
   if (!f->blockno) {
@@ -198,9 +214,13 @@ void myfclose(MyFILE* stream) {
 int myfgetc(MyFILE* stream) {
   if (FAT[stream->blockno] < 1) {
     diskblock_t dir = {0};
-    readblock(&dir, stream->dirBlockNo);
-    int remaining = (dir.dir.entrylist[stream->dirEntryNo].filelength-1) % (BLOCKSIZE) + 1;
-    if (remaining == stream->pos)  {
+    readblock(&dir, stream->dirBlockNo);  // this check should most def be done
+                                          // another way e.g. storing remaining
+                                          // counter in the stream itself
+    int remaining =
+        (dir.dir.entrylist[stream->dirEntryNo].filelength - 1) % (BLOCKSIZE) +
+        1;
+    if (remaining == stream->pos) {
       return EOF;
     }
   }
@@ -237,22 +257,108 @@ void saveBuffer(MyFILE* stream, fatentry_t next) {
   stream->pos = 0;
 }
 
-/*
-C:
-- myfopen()
-- myfputc()
-- myfgetc()
-- myfclose()
-*/
+void saveDirEntry(diskblock_t* dirBlock, fatentry_t parentLoc, fatentry_t childLoc, const char* name){
+  direntry_t entry = (direntry_t){
+      .entrylength = 0,
+      .isdir = true,
+      .unused = false,
+      .modtime = 0,
+      .filelength = 0,
+      .firstblock = childLoc
+  };
+  strcpy(entry.name, name);
+  dirBlock->dir.entrylist[dirBlock->dir.nextEntry++] = entry;
+  writeblock(dirBlock, parentLoc);
+}
 
-void mymkdir(const char* path) {}
+fatentry_t createDirBlock(void) {
+  fatentry_t loc = findFree();
+
+  FAT[loc] = ENDOFCHAIN;
+  copyFAT();
+
+  diskblock_t newDir = {0};
+  newDir.dir = (dirblock_t){.isdir = true, .nextEntry = 0, .entrylist = 0};
+  writeblock(&newDir, loc);
+
+  return loc;
+}
+
+void mymkdir(const char* path) {
+  diskblock_t dirBlock;
+  fatentry_t dirLoc;
+
+  if (path[0] == '/') {
+    readblock(&dirBlock, rootDirIndex);
+    path++;
+    dirLoc = rootDirIndex;
+  } else {
+    readblock(&dirBlock, currentDirIndex);
+    dirLoc = currentDirIndex;
+  }
+
+  char* rest = NULL;
+  char* token;
+  char* copy = strdup(path);
+  for (token = strtok_r(copy, "/", &rest);
+       token != NULL;
+       token = strtok_r(NULL, "/", &rest)) {
+    fatentry_t loc = searchDir(&dirBlock.dir, token);
+    if (loc == 0) {
+      loc = createDirBlock();
+      saveDirEntry(&dirBlock, dirLoc, loc, token);
+    }
+    readblock(&dirBlock, loc);
+    dirLoc = loc;
+  }
+  free(copy);
+}
+
+char** mylistdir(const char* path) {
+  diskblock_t dirBlock;
+  fatentry_t dirLoc;
+  char* copy = strdup(path);
+  if (copy[0] == '/') {
+    readblock(&dirBlock, rootDirIndex);
+    copy++;
+    dirLoc = rootDirIndex;
+  } else {
+    readblock(&dirBlock, currentDirIndex);
+    dirLoc = currentDirIndex;
+  }
+
+  char* rest = NULL;
+  char* token;
+  if (strcmp(path, "/") == 0) {
+    readblock(&dirBlock, rootDirIndex);
+  } else{
+  for (token = strtok_r(copy, "/", &rest);
+       token != NULL;
+       token = strtok_r(NULL, "/", &rest)) {
+    fatentry_t loc = searchDir(&dirBlock.dir, token);
+    if (loc == 0) {
+      return 0;
+    }
+    readblock(&dirBlock, loc);
+    dirLoc = loc;
+  }
+  }
+  char** contents = malloc(sizeof(char*)*dirBlock.dir.nextEntry);
+  for (int i = 0; i < dirBlock.dir.nextEntry; i++) {
+    contents[i] = strdup(dirBlock.dir.entrylist[i].name);
+  }
+  contents[dirBlock.dir.nextEntry] = 0;
+
+  return contents;
+}
+
+/* B  ^^^^^^
+- mymkdir( char * path) that creates a new directory
+- char ** mylistdir (char * path) that lists the content of a directory
+*/
 
 void myrmdir(const char* path) {}
 
 void mychdir(const char* path) {}
 
 void myremove(const char* path) {}
-
-char** mylistdir(const char* path) {
-  return 0;
-}

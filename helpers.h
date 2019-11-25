@@ -33,6 +33,13 @@ int myfgetc(MyFILE* stream);
 // is full
 void myfputc(int b, MyFILE* stream);
 
+
+// store a directory inside another, update parents next entry pointer
+void saveDirEntry(diskblock_t* dirBlock, fatentry_t, fatentry_t loc, const char* name);
+
+// create a directory block and return it's location
+fatentry_t createDirBlock();
+
 // this function will create a new directory, using path, e.g. mymkdir
 // (“/first/second/third”) creates directory “third” in parent dir “second”,
 // which is a subdir of directory “first”, and “first is a sub directory of

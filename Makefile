@@ -3,7 +3,7 @@ CC=gcc
 CFLAGS=-Wall
 SHELL:=/bin/bash
 
-all: hex
+all: hexB
 shell: filesys.o shell.o
 shell.o: shell.c
 	gcc -c shell.c -o shell.o
@@ -13,9 +13,12 @@ clean:
 	rm -f shell shell.o filesys.o
 run: shell
 	./shell
-hex: run
+hexC: run
 	hexdump -C virtualdiskC3_C1
-	# hexdump -C virtualdisk_test
+hexD: run
+	hexdump -C virtualdiskD3_D1
+hexB: run
+	hexdump -C virtualdiskB3_B1_a
 diff: run
 	# colordiff -u <(hexdump -C virtualdiskD3_D1) <(hexdump -C virtualdisk_test)
 	colordiff -u <(hexdump -C virtualdiskD3_D1) <(hexdump -C virtualdiskC3_C1)
