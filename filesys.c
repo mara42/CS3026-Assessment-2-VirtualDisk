@@ -77,14 +77,11 @@ void readblock(diskblock_t* block, int block_address) {
  * write root directory block to virtual disk
  */
 void format() {
-  int pos = 0;
-  int fatentry = 0;
 
   diskblock_t block = {0};
   memmove(block.data, (Byte*)"S3008 Operating Systems Assessment 2012", 40);
   writeblock(&block, 0);
 
-  // memset(FAT + sizeof(fatentry_t), UNUSED, sizeof(FAT)-sizeof(fatentry_t));
   memset(FAT, UNUSED, sizeof(FAT));
   FAT[0] = 0;
 
@@ -152,15 +149,6 @@ MyFILE* myfopen(const char* filename, const char* mode) {
 
   readblock(&f->buffer, f->blockno);
 
-
-  // for (int i = 0; i < dir->nextEntry; i++) {
-  //   direntry_t entry = dir->entrylist[i];
-  //   if (strcmp(entry.name, filename) == 0 && !entry.isdir) {
-  //     f->blockno = entry.firstblock;
-  //     readblock(&f->buffer, entry.firstblock);
-  //   }
-  // }
-
   /* new file */
   if (!f->blockno) {
     f->blockno = findFree();
@@ -188,7 +176,6 @@ MyFILE* myfopen(const char* filename, const char* mode) {
   return f;
 }
 
-// TODO: do we need to support multiple open files at once?
 fatentry_t findFree() {
   for (int i = rootDirIndex + 1; i < MAXBLOCKS; i++) {
     if (FAT[i] == UNUSED)
@@ -303,11 +290,13 @@ void mymkdir(const char* path) {
   for (token = strtok_r(copy, "/", &rest);
        token != NULL;
        token = strtok_r(NULL, "/", &rest)) {
+
     fatentry_t loc = searchDir(&dirBlock.dir, token);
     if (loc == 0) {
       loc = createDirBlock();
       saveDirEntry(&dirBlock, dirLoc, loc, token);
     }
+
     readblock(&dirBlock, loc);
     dirLoc = loc;
   }
@@ -335,6 +324,7 @@ char** mylistdir(const char* path) {
   for (token = strtok_r(copy, "/", &rest);
        token != NULL;
        token = strtok_r(NULL, "/", &rest)) {
+
     fatentry_t loc = searchDir(&dirBlock.dir, token);
     if (loc == 0) {
       return 0;
